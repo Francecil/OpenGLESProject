@@ -22,15 +22,20 @@ import static android.opengl.GLES20.*;
 
 
 public class AirHockeyRenderer implements GLSurfaceView.Renderer {
-    private static final int POSITION_COMPONENT_COUNT = 2;
-    private static final int BYTES_PER_FLOAT = 4;
-    private final FloatBuffer vertexData;//本地内存存储数据
-    private final Context context;
-    private int program;
-    private static final String U_COLOR = "u_Color";
     private static final String A_POSITION = "a_Position";
-    private int uColorLocation;//U_COLOR在OpenGL程序对象中位置的变量
+    private static final String A_COLOR = "a_Color";
+    private static final int POSITION_COMPONENT_COUNT = 2;
+    private static final int COLOR_COMPONENT_COUNT = 3;
+    private static final int BYTES_PER_FLOAT = 4;
+    private static final int STRIDE =
+            (POSITION_COMPONENT_COUNT + COLOR_COMPONENT_COUNT) * BYTES_PER_FLOAT;//跨距告诉OpenGL每两个顶点在本地内存需要跳过的数据长度
+
+    private final FloatBuffer vertexData;
+    private final Context context;
+
+    private int program;
     private int aPositionLocation;
+    private int aColorLocation;
     /*
     * surface创建时调用
     * @parem gl10: 1.0遗留 为向下兼容
@@ -72,23 +77,23 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
 		};
          */
         float[] tableVerticesWithTriangles = {
-                // Triangle 1
-                -0.5f, -0.5f,
-                0.5f,  0.5f,
-                -0.5f,  0.5f,
+                // Order of coordinates: X, Y, R, G, B
 
-                // Triangle 2
-                -0.5f, -0.5f,
-                0.5f, -0.5f,
-                0.5f,  0.5f,
+                // Triangle Fan
+                0f,    0f,   1f,   1f,   1f,
+                -0.5f, -0.5f, 0.7f, 0.7f, 0.7f,
+                0.5f, -0.5f, 0.7f, 0.7f, 0.7f,
+                0.5f,  0.5f, 0.7f, 0.7f, 0.7f,
+                -0.5f,  0.5f, 0.7f, 0.7f, 0.7f,
+                -0.5f, -0.5f, 0.7f, 0.7f, 0.7f,
 
                 // Line 1
-                -0.5f, 0f,
-                0.5f, 0f,
+                -0.5f, 0f, 1f, 0f, 0f,
+                0.5f, 0f, 1f, 0f, 0f,
 
                 // Mallets
-                0f, -0.25f,
-                0f,  0.25f
+                0f, -0.25f, 0f, 0f, 1f,
+                0f,  0.25f, 1f, 0f, 0f
         };
         vertexData = ByteBuffer.allocateDirect(tableVerticesWithTriangles.length * BYTES_PER_FLOAT)//分配本地内存
                 .order(ByteOrder.nativeOrder())//保证一个平台使用同样的排序：按照本地字节序组织内容
@@ -112,7 +117,8 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
         //告诉OpenGL绘制东西要屏幕上要使用这里的program
         glUseProgram(program);
         //获取uniform和attribute的位置
-        uColorLocation = glGetUniformLocation(program, U_COLOR);
+        //uColorLocation = glGetUniformLocation(program, U_COLOR); 改为
+        aColorLocation = glGetAttribLocation(program,A_COLOR);
         aPositionLocation = glGetAttribLocation(program, A_POSITION);
         //关联属性与顶点数据的数组
         vertexData.position(0);//确保本地内存的vertexData从数组头开始读取
@@ -122,14 +128,22 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
          * @param size:这里我们只用了2个分量(x,y)，注意在着色器中a_Pointion被定义为vec4
          * @param type:数据类型
          * @param normalized:只要使用整形该参数才有意义
-         * @param stride:暂时忽略
+         * @param stride:跨距
          * @param ptr:去哪读数据
          * 注意传入正确的参数，否则难以调试
          */
-        glVertexAttribPointer(aPositionLocation, POSITION_COMPONENT_COUNT, GL_FLOAT,
-                false, 0, vertexData);
+//        glVertexAttribPointer(aPositionLocation, POSITION_COMPONENT_COUNT, GL_FLOAT,
+//                false, 0, vertexData); 改为
+        glVertexAttribPointer(aPositionLocation,POSITION_COMPONENT_COUNT,GL_FLOAT,false,STRIDE,vertexData);
         //告诉OpenGL去aPositionLocation寻找数据
         glEnableVertexAttribArray(aPositionLocation);
+
+        //把顶点数据和a_Color关联起来
+        vertexData.position(POSITION_COMPONENT_COUNT);
+        //顶点数据的颜色值从2位置开始，有3个，GL_FLOAT类型,跨距STRIDE,
+        glVertexAttribPointer(aColorLocation,COLOR_COMPONENT_COUNT,GL_FLOAT,false,STRIDE,vertexData);
+        //告诉OpenGL去aColorLocation寻找颜色数据
+        glEnableVertexAttribArray(aColorLocation);
     }
 
     /*
@@ -149,30 +163,25 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
     * */
     @Override
     public void onDrawFrame(GL10 gl10) {
-        Log.i("zjx3","onDrawFrame");
         glClear(GL_COLOR_BUFFER_BIT);
         //更新着色器中u_Color中的值(在onSurfaceCreated中我们已经获取到uniform的位置并存入uColorLocation)
         // uniform没有默认值 所以这里我们必须指定
         //先随便设置个RGBA
-        glUniform4f(uColorLocation,1.0f,1.0f,1.0f,1.0f);
         /*
         * glDrawArrays (int mode, int first, int count)
         * mode:我们要画的类型
         * first:从顶点数组vertexData那个位置开始找
-        * count:读入一个顶点 这里读6个 画出两个三角形
+        * count:读入一个顶点 这里读6个 画出三角形扇
         * */
-        glDrawArrays(GL_TRIANGLES,0,6);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 6);
         //一些其他的绘制
         // Draw the center dividing line.
-        glUniform4f(uColorLocation, 1.0f, 0.0f, 0.0f, 1.0f);
         glDrawArrays(GL_LINES, 6, 2);
 
         // Draw the first mallet blue.
-        glUniform4f(uColorLocation, 0.0f, 0.0f, 1.0f, 1.0f);
         glDrawArrays(GL_POINTS, 8, 1);
 
         // Draw the second mallet red.
-        glUniform4f(uColorLocation, 1.0f, 0.0f, 0.0f, 1.0f);
         glDrawArrays(GL_POINTS, 9, 1);
     }
 }
