@@ -30,7 +30,7 @@ public class MainActivity extends AppCompatActivity {
             //为了兼容2.0版本的 这边不设置Version为3
             glSurfaceView.setEGLContextClientVersion(2);
             //传入一个自定义Renderer渲染器
-            glSurfaceView.setRenderer(new FirstRenderer());
+            glSurfaceView.setRenderer(new AirHockeyRenderer(this));
             rendererSet = true ;
             //显示在屏幕上
             setContentView(glSurfaceView);
