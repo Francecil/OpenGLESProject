@@ -19,9 +19,13 @@ import static android.opengl.GLES20.glClear;
 import static android.opengl.GLES20.glClearColor;
 import static android.opengl.GLES20.glViewport;
 import static android.opengl.GLES20.*;
+import static android.opengl.Matrix.*;
 
 
 public class AirHockeyRenderer implements GLSurfaceView.Renderer {
+    private static final String U_MATRIX = "u_Matrix";
+    private final float[] projectionMatrix = new float[16];//用于存储矩阵
+    private int uMatrixLocation;//u_Matrix uniform位置
     private static final String A_POSITION = "a_Position";
     private static final String A_COLOR = "a_Color";
     private static final int POSITION_COMPONENT_COUNT = 2;
@@ -144,6 +148,7 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
         glVertexAttribPointer(aColorLocation,COLOR_COMPONENT_COUNT,GL_FLOAT,false,STRIDE,vertexData);
         //告诉OpenGL去aColorLocation寻找颜色数据
         glEnableVertexAttribArray(aColorLocation);
+        uMatrixLocation = glGetUniformLocation(program,U_MATRIX);
     }
 
     /*
@@ -155,6 +160,17 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
         //设置视口尺寸，渲染surface的大小
         Log.i("zjx2","onSurfaceChanged");
         glViewport(0,0,width,height);
+        final float aspectRatio = width > height ?
+                (float) width / (float) height :
+                (float) height / (float) width;
+
+        if (width > height) {
+            // Landscape
+            orthoM(projectionMatrix, 0, -aspectRatio, aspectRatio, -1f, 1f, -1f, 1f);
+        } else {
+            // Portrait or square
+            orthoM(projectionMatrix, 0, -1f, 1f, -aspectRatio, aspectRatio, -1f, 1f);
+        }
     }
     /*
     *每绘制一帧，都会被GLSurfaceView调用，所以在该方法一定要绘制东西，即使只是clear screen
@@ -164,6 +180,9 @@ public class AirHockeyRenderer implements GLSurfaceView.Renderer {
     @Override
     public void onDrawFrame(GL10 gl10) {
         glClear(GL_COLOR_BUFFER_BIT);
+        // Assign the matrix
+        glUniformMatrix4fv(uMatrixLocation, 1, false, projectionMatrix, 0);
+
         //更新着色器中u_Color中的值(在onSurfaceCreated中我们已经获取到uniform的位置并存入uColorLocation)
         // uniform没有默认值 所以这里我们必须指定
         //先随便设置个RGBA
